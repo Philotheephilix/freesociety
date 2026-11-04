@@ -38,15 +38,18 @@ server.tool(
 );
 
 // Register configure_permissions tool
-server.tool(
+const SERVICES = ["swiggy", "jaw", "bitrefill"] as const;
+server.registerTool(
   "configure_permissions",
-  "Configure tool permissions for a service",
   {
-    service: z.enum(["swiggy", "jaw", "bitrefill"]),
-    permissions: z.record(z.boolean()),
+    description: "Configure tool permissions for a service",
+    inputSchema: {
+      service: z.enum(SERVICES),
+      permissions: z.record(z.string(), z.boolean()),
+    },
   },
   async ({ service, permissions }) => {
-    const result = handleConfigurePermissions(registry, service, permissions);
+    const result = await handleConfigurePermissions(registry, service, permissions as Record<string, boolean>);
     return {
       content: [{ type: "text", text: result }],
     };
