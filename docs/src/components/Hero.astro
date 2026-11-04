@@ -1,0 +1,214 @@
+---
+import { LinkButton } from '@astrojs/starlight/components';
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { title = data.title, tagline, actions = [] } = data.hero || {};
+const PAGE_TITLE_ID = '_top';
+---
+
+<div class="errand-hero">
+	<div class="eh-grid">
+		<div class="eh-lead">
+			<p class="eh-eyebrow">
+				<span class="eh-dot"></span>MCP server · zpay-hub v1.0.0
+			</p>
+			<h1 id={PAGE_TITLE_ID} data-page-title set:html={title} />
+			{tagline && <p class="eh-tagline" set:html={tagline} />}
+			{
+				actions.length > 0 && (
+					<div class="eh-actions">
+						{actions.map(({ attrs = {}, icon, link: href, text, variant }) => (
+							<LinkButton {href} {variant} icon={icon?.name} {...attrs}>
+								{text}
+							</LinkButton>
+						))}
+					</div>
+				)
+			}
+			<dl class="eh-spec">
+				<div><dt>Endpoint</dt><dd>errand.philotheephilix.in/mcp</dd></div>
+				<div><dt>Transport</dt><dd>Streamable HTTP · JSON-RPC</dd></div>
+				<div><dt>Settlement</dt><dd>USDC on Base · Bitrefill</dd></div>
+			</dl>
+		</div>
+
+		<div class="eh-terminal" aria-hidden="true">
+			<div class="eh-term-bar">
+				<span class="eh-tl"></span><span class="eh-tl"></span><span class="eh-tl"></span>
+				<span class="eh-term-name">agent → errand/mcp</span>
+			</div>
+			<pre class="eh-term-body"><code><span class="l-c"># one call, one cap — the agent never spends past it</span>
+<span class="l-p">→</span> <span class="l-f">buy</span>(<span class="l-k">items</span>=<span class="l-s">"2L milk, a dozen eggs"</span>,
+      <span class="l-k">maxSpendUsdc</span>=<span class="l-n">8</span>)
+
+<span class="l-c"># priced, gated, paid, claimed — behind the guardrail</span>
+<span class="l-ok">✓</span> cart priced      <span class="l-dim">$6.41 ≤ cap</span>
+<span class="l-ok">✓</span> invoice settled  <span class="l-dim">USDC · Base</span>
+<span class="l-ok">✓</span> order placed     <span class="l-dim">SwiggyPay</span>
+<span class="l-r">{'{ ok: true, code: "SUCCESS" }'}</span></code></pre>
+		</div>
+	</div>
+</div>
+
+<style>
+	.errand-hero {
+		margin-bottom: 1rem;
+		padding: 0.5rem 0 2.75rem;
+	}
+
+	.eh-grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 2.25rem;
+		align-items: center;
+	}
+
+	.eh-eyebrow {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-family: var(--e-mono);
+		font-size: 0.78rem;
+		color: var(--e-text-muted);
+		background: var(--e-bg-subtle);
+		border: 1px solid var(--e-border);
+		border-radius: 999px;
+		padding: 0.3rem 0.7rem;
+		margin: 0 0 1.4rem;
+	}
+
+	.eh-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: #16a34a;
+		box-shadow: 0 0 0 3px color-mix(in srgb, #16a34a 18%, transparent);
+	}
+
+	.errand-hero h1 {
+		font-family: var(--e-sans);
+		font-weight: 760;
+		letter-spacing: -0.035em;
+		line-height: 1.05;
+		font-size: clamp(2.3rem, 1.4rem + 3.4vw, 3.5rem);
+		color: var(--e-text-strong);
+		margin: 0;
+		text-wrap: balance;
+	}
+
+	.eh-tagline {
+		font-family: var(--e-sans);
+		font-size: clamp(1.02rem, 0.96rem + 0.35vw, 1.15rem);
+		line-height: 1.6;
+		color: var(--e-text-muted);
+		max-width: 46ch;
+		margin: 1.15rem 0 0;
+	}
+
+	.eh-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		margin-top: 1.9rem;
+	}
+
+	.eh-spec {
+		display: grid;
+		grid-template-columns: 1fr;
+		margin: 2rem 0 0;
+		max-width: 32rem;
+		border-top: 1px solid var(--e-border);
+	}
+
+	.eh-spec > div {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.5rem 0;
+		border-bottom: 1px solid var(--e-border);
+	}
+
+	.eh-spec dt {
+		font-family: var(--e-sans);
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--e-text-muted);
+		margin: 0;
+	}
+
+	.eh-spec dd {
+		font-family: var(--e-mono);
+		font-size: 0.8rem;
+		color: var(--e-text);
+		margin: 0;
+		text-align: right;
+	}
+
+	/* Terminal panel — the page's visual anchor. */
+	.eh-terminal {
+		border-radius: 14px;
+		overflow: hidden;
+		border: 1px solid #1f2430;
+		background: #0d1117;
+		box-shadow: 0 24px 60px -24px rgba(13, 17, 23, 0.5),
+			0 2px 8px rgba(13, 17, 23, 0.12);
+	}
+
+	.eh-term-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.7rem 0.95rem;
+		background: #161b22;
+		border-bottom: 1px solid #1f2430;
+	}
+
+	.eh-tl {
+		width: 11px;
+		height: 11px;
+		border-radius: 50%;
+		background: #30363d;
+	}
+	.eh-tl:nth-child(1) { background: #ff5f57; }
+	.eh-tl:nth-child(2) { background: #febc2e; }
+	.eh-tl:nth-child(3) { background: #28c840; }
+
+	.eh-term-name {
+		margin-left: 0.6rem;
+		font-family: var(--e-mono);
+		font-size: 0.74rem;
+		color: #8b949e;
+	}
+
+	.eh-term-body {
+		margin: 0;
+		padding: 1.15rem 1.25rem 1.3rem;
+		background: #0d1117;
+		font-family: var(--e-mono);
+		font-size: 0.82rem;
+		line-height: 1.75;
+		color: #c9d1d9;
+		overflow-x: auto;
+		white-space: pre;
+		tab-size: 2;
+	}
+
+	.eh-term-body code { font-family: inherit; background: none; border: 0; padding: 0; }
+
+	.l-c   { color: #6e7681; font-style: italic; }
+	.l-p   { color: #58a6ff; }
+	.l-f   { color: #d2a8ff; }
+	.l-k   { color: #79c0ff; }
+	.l-s   { color: #a5d6ff; }
+	.l-n   { color: #f0883e; }
+	.l-ok  { color: #3fb950; font-weight: 700; }
+	.l-dim { color: #6e7681; }
+	.l-r   { color: #7ee787; }
+
+	@media (min-width: 56rem) {
+		.eh-grid {
+			grid-template-columns: 1.05fr 0.95fr;
+			gap: 3.25rem;
+		}
+	}
+</style>

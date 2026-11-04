@@ -9,10 +9,13 @@
 
 import { createServer } from "http";
 import { createHash, randomBytes } from "crypto";
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
 import { execSync } from "child_process";
+import {
+  loadCredential,
+  saveCredential,
+  deleteCredential,
+  sanitizeAccountId,
+} from "./zpay-store.js";
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -31,8 +34,6 @@ const CLIENT_ID =
   process.env.JAW_CLIENT_ID ??
   "https://gist.githubusercontent.com/Philotheephilix/ed07da39b9b68ae3f4f3a6e53cb272df/raw/zpay-jaw-client.json";
 
-const TOKEN_PATH = join(homedir(), ".zpay", "jaw-auth.json");
-
 // ── PKCE ─────────────────────────────────────────────────────────────────────
 
 function base64url(buf: Buffer): string {
@@ -45,7 +46,7 @@ function generatePKCE(): { verifier: string; challenge: string } {
   return { verifier, challenge };
 }
 
-// ── Storage ────────────────────────────────────────────────────────────────
+// ── Storage (SQLite, keyed by account) ───────────────────────────────────────
 
 interface StoredToken {
   access_token: string;
@@ -53,25 +54,41 @@ interface StoredToken {
   expires_at: number; // epoch ms
 }
 
-function loadStore(): StoredToken | null {
-  try {
-    return JSON.parse(readFileSync(TOKEN_PATH, "utf8")) as StoredToken;
-  } catch {
-    return null;
-  }
+function loadStore(accountId: string): StoredToken | null {
+  const cred = loadCredential(accountId, "jaw");
+  if (!cred?.access_token) return null;
+  return {
+    access_token: cred.access_token,
+    refresh_token: cred.refresh_token,
+    expires_at: cred.expires_at ?? 0,
+  };
 }
 
-function saveStore(s: StoredToken): void {
-  mkdirSync(join(homedir(), ".zpay"), { recursive: true });
-  writeFileSync(TOKEN_PATH, JSON.stringify(s, null, 2), { mode: 0o600 });
+function saveStore(accountId: string, s: StoredToken): void {
+  saveCredential(accountId, "jaw", {
+    access_token: s.access_token,
+    refresh_token: s.refresh_token,
+    expires_at: s.expires_at,
+  });
 }
 
 // ── Local callback server ────────────────────────────────────────────────────
 
+// How long to keep the local callback listener open waiting for the user to
+// finish the JAW login. If they never do, we close it so the port is freed and
+// the next connect_jaw can bind cleanly (instead of EADDRINUSE forever).
+const CALLBACK_TIMEOUT_MS = 3 * 60_000;
+
 function waitForCallback(expectedState: string): Promise<string> {
   return new Promise((resolve, reject) => {
+    let settled = false;
     const server = createServer((req, res) => {
       const url = new URL(req.url!, `http://localhost:${CALLBACK_PORT}`);
+      // Ignore stray requests (e.g. favicon) so they don't resolve/reject the flow.
+      if (url.pathname !== "/callback") {
+        res.writeHead(204).end();
+        return;
+      }
       const code = url.searchParams.get("code");
       const state = url.searchParams.get("state");
       const error = url.searchParams.get("error");
@@ -79,17 +96,53 @@ function waitForCallback(expectedState: string): Promise<string> {
       res.writeHead(200, { "Content-Type": "text/html" });
       if (code && state === expectedState) {
         res.end("<html><body><h2>JAW connected! You can close this tab.</h2></body></html>");
-        server.close();
-        resolve(code);
+        finish(null, code);
       } else {
         const why = error ?? (state !== expectedState ? "state mismatch" : "no code");
         res.end(`<html><body><h2>JAW auth failed: ${why}</h2></body></html>`);
-        server.close();
-        reject(new Error(`JAW OAuth error: ${why}`));
+        finish(new Error(`JAW OAuth error: ${why}`));
       }
     });
+
+    // Single cleanup path: close the listener (freeing the port) exactly once,
+    // then settle the promise.
+    const timer = setTimeout(() => {
+      finish(
+        new Error(
+          `JAW login was not completed within ${CALLBACK_TIMEOUT_MS / 60_000} minutes. ` +
+            `The callback listener on port ${CALLBACK_PORT} has been closed; call connect_jaw again to retry.`
+        )
+      );
+    }, CALLBACK_TIMEOUT_MS);
+
+    function finish(err: Error | null, code?: string): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        server.close();
+      } catch {
+        /* already closing */
+      }
+      if (err) reject(err);
+      else resolve(code!);
+    }
+
+    server.on("error", (e: NodeJS.ErrnoException) => {
+      if (e.code === "EADDRINUSE") {
+        finish(
+          new Error(
+            `Cannot start the JAW login callback listener: port ${CALLBACK_PORT} is already in use — ` +
+              `a previous login attempt is likely still open. Close that login tab, or free the port ` +
+              `(lsof -ti :${CALLBACK_PORT} | xargs kill), then call connect_jaw again.`
+          )
+        );
+      } else {
+        finish(e);
+      }
+    });
+
     server.listen(CALLBACK_PORT, "127.0.0.1");
-    server.on("error", reject);
   });
 }
 
@@ -180,14 +233,15 @@ export interface JawAuthResult {
 
 // Non-interactive refresh (cache or refresh_token only, else throw) — wired to
 // onAuthRefresh so an unattended 401 fails fast instead of hanging on a browser login.
-export async function refreshJawTokenSilent(): Promise<string> {
-  const store = loadStore();
+export async function refreshJawTokenSilent(accountId?: string): Promise<string> {
+  const account = sanitizeAccountId(accountId);
+  const store = loadStore(account);
   if (store?.access_token && store.expires_at > Date.now() + REFRESH_BUFFER_MS) {
     return store.access_token;
   }
   if (store?.refresh_token) {
     const refreshed = await refreshAccessToken(store.refresh_token);
-    saveStore(refreshed);
+    saveStore(account, refreshed);
     return refreshed.access_token;
   }
   throw new Error(
@@ -202,25 +256,37 @@ export async function refreshJawTokenSilent(): Promise<string> {
  * - Otherwise: opens the browser to JAW's login, waits for the callback,
  *   exchanges the code, and stores the token. loginUrl is the opened URL.
  *
+ * Credentials are stored per account (default "default"), so two users on the
+ * same hub never share a token. forceReauth discards any cached/refreshable
+ * token for the account and always runs the full browser flow — this is how a
+ * user re-authenticates as themselves and always gets a fresh login URL back.
+ *
  * onAuthUrl, when provided, is called with the login URL right before opening
  * the browser, so the caller can surface it to the user immediately.
  */
 export async function getJawToken(
-  onAuthUrl?: (url: string) => void
+  onAuthUrl?: (url: string) => void,
+  opts: { accountId?: string; forceReauth?: boolean } = {}
 ): Promise<JawAuthResult> {
-  const store = loadStore();
+  const account = sanitizeAccountId(opts.accountId);
 
-  if (store?.access_token && store.expires_at > Date.now() + REFRESH_BUFFER_MS) {
-    return { accessToken: store.access_token, loginUrl: "" };
-  }
+  if (opts.forceReauth) {
+    deleteCredential(account, "jaw");
+  } else {
+    const store = loadStore(account);
 
-  if (store?.refresh_token) {
-    try {
-      const refreshed = await refreshAccessToken(store.refresh_token);
-      saveStore(refreshed);
-      return { accessToken: refreshed.access_token, loginUrl: "" };
-    } catch {
-      // fall through to full flow
+    if (store?.access_token && store.expires_at > Date.now() + REFRESH_BUFFER_MS) {
+      return { accessToken: store.access_token, loginUrl: "" };
+    }
+
+    if (store?.refresh_token) {
+      try {
+        const refreshed = await refreshAccessToken(store.refresh_token);
+        saveStore(account, refreshed);
+        return { accessToken: refreshed.access_token, loginUrl: "" };
+      } catch {
+        // fall through to full flow
+      }
     }
   }
 
@@ -234,7 +300,7 @@ export async function getJawToken(
 
   const code = await callbackPromise;
   const token = await exchangeCode(code, verifier);
-  saveStore(token);
+  saveStore(account, token);
 
   return { accessToken: token.access_token, loginUrl };
 }

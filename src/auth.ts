@@ -1,13 +1,14 @@
 import { createServer } from "http";
 import { createHash, randomBytes } from "crypto";
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
 import { execSync } from "child_process";
+import {
+  loadCredential,
+  saveCredential,
+  deleteCredential,
+  sanitizeAccountId,
+} from "./zpay-store.js";
 
 // ── Storage ──────────────────────────────────────────────────────────────────
-
-const TOKEN_PATH = join(homedir(), ".zpay", "auth.json");
 
 interface StoredToken {
   access_token: string;
@@ -82,30 +83,68 @@ async function registerClient(registrationEndpoint: string): Promise<DCRResponse
 
 // ── Local callback server ─────────────────────────────────────────────────────
 
+const CALLBACK_PORT = 9988;
+const CALLBACK_TIMEOUT_MS = 3 * 60_000;
+
 function waitForCallback(): Promise<string> {
   return new Promise((resolve, reject) => {
+    let settled = false;
     const server = createServer((req, res) => {
-      const url = new URL(req.url!, `http://localhost:9988`);
+      const url = new URL(req.url!, `http://localhost:${CALLBACK_PORT}`);
+      if (url.pathname !== "/callback") {
+        res.writeHead(204).end();
+        return;
+      }
       const code = url.searchParams.get("code");
       const error = url.searchParams.get("error");
 
       res.writeHead(200, { "Content-Type": "text/html" });
       if (code) {
-        res.end(
-          "<html><body><h2>Authenticated! You can close this tab.</h2></body></html>"
-        );
-        server.close();
-        resolve(code);
+        res.end("<html><body><h2>Authenticated! You can close this tab.</h2></body></html>");
+        finish(null, code);
       } else {
-        res.end(
-          `<html><body><h2>Auth failed: ${error ?? "unknown"}</h2></body></html>`
-        );
-        server.close();
-        reject(new Error(`OAuth error: ${error}`));
+        res.end(`<html><body><h2>Auth failed: ${error ?? "unknown"}</h2></body></html>`);
+        finish(new Error(`OAuth error: ${error ?? "unknown"}`));
       }
     });
-    server.listen(9988, "127.0.0.1");
-    server.on("error", reject);
+
+    const timer = setTimeout(() => {
+      finish(
+        new Error(
+          `Swiggy login was not completed within ${CALLBACK_TIMEOUT_MS / 60_000} minutes. ` +
+            `The callback listener on port ${CALLBACK_PORT} has been closed; call connect_swiggy again to retry.`
+        )
+      );
+    }, CALLBACK_TIMEOUT_MS);
+
+    function finish(err: Error | null, code?: string): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        server.close();
+      } catch {
+        /* already closing */
+      }
+      if (err) reject(err);
+      else resolve(code!);
+    }
+
+    server.on("error", (e: NodeJS.ErrnoException) => {
+      if (e.code === "EADDRINUSE") {
+        finish(
+          new Error(
+            `Cannot start the Swiggy login callback listener: port ${CALLBACK_PORT} is already in use — ` +
+              `a previous login attempt is likely still open. Close that login tab, or free the port ` +
+              `(lsof -ti :${CALLBACK_PORT} | xargs kill), then call connect_swiggy again.`
+          )
+        );
+      } else {
+        finish(e);
+      }
+    });
+
+    server.listen(CALLBACK_PORT, "127.0.0.1");
   });
 }
 
@@ -190,17 +229,26 @@ interface AuthStore extends StoredToken {
   token_endpoint?: string;
 }
 
-function loadStore(): AuthStore | null {
-  try {
-    return JSON.parse(readFileSync(TOKEN_PATH, "utf8")) as AuthStore;
-  } catch {
-    return null;
-  }
+function loadStore(accountId: string): AuthStore | null {
+  const cred = loadCredential(accountId, "swiggy");
+  if (!cred?.access_token) return null;
+  return {
+    access_token: cred.access_token,
+    refresh_token: cred.refresh_token,
+    expires_at: cred.expires_at ?? 0,
+    client_id: cred.client_id,
+    token_endpoint: cred.token_endpoint,
+  };
 }
 
-function saveStore(s: AuthStore): void {
-  mkdirSync(join(homedir(), ".zpay"), { recursive: true });
-  writeFileSync(TOKEN_PATH, JSON.stringify(s, null, 2), { mode: 0o600 });
+function saveStore(accountId: string, s: AuthStore): void {
+  saveCredential(accountId, "swiggy", {
+    access_token: s.access_token,
+    refresh_token: s.refresh_token,
+    expires_at: s.expires_at,
+    client_id: s.client_id,
+    token_endpoint: s.token_endpoint,
+  });
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -209,8 +257,9 @@ const REFRESH_BUFFER_MS = 60_000; // refresh 1 min before expiry
 
 // Non-interactive refresh (cache or refresh_token only, else throw) — wired to
 // onAuthRefresh so an unattended 401 fails fast instead of hanging on a browser login.
-export async function refreshSwiggyTokenSilent(): Promise<string> {
-  const store = loadStore();
+export async function refreshSwiggyTokenSilent(accountId?: string): Promise<string> {
+  const account = sanitizeAccountId(accountId);
+  const store = loadStore(account);
   if (store?.access_token && store.expires_at > Date.now() + REFRESH_BUFFER_MS) {
     return store.access_token;
   }
@@ -220,7 +269,7 @@ export async function refreshSwiggyTokenSilent(): Promise<string> {
       store.client_id,
       store.refresh_token
     );
-    saveStore({ ...refreshed, client_id: store.client_id, token_endpoint: store.token_endpoint });
+    saveStore(account, { ...refreshed, client_id: store.client_id, token_endpoint: store.token_endpoint });
     return refreshed.access_token;
   }
   throw new Error(
@@ -231,10 +280,37 @@ export async function refreshSwiggyTokenSilent(): Promise<string> {
 /**
  * Returns a valid Bearer token. Handles:
  * - First run: DCR → browser OAuth flow → store
- * - Subsequent runs: load from disk, refresh if near-expiry, re-auth if refresh fails
+ * - Subsequent runs: load from store, refresh if near-expiry, re-auth if refresh fails
+ *
+ * Credentials (incl. the per-account DCR client_id) are stored per account
+ * (default "default"), so two users on the same hub never share a token.
+ * forceReauth discards any cached/refreshable token for the account and always
+ * runs the full browser OAuth flow.
  */
-export async function getAccessToken(): Promise<string> {
-  const store = loadStore();
+export async function getAccessToken(
+  opts: { accountId?: string; forceReauth?: boolean } = {}
+): Promise<string> {
+  const account = sanitizeAccountId(opts.accountId);
+
+  // On forceReauth, keep the DCR client registration (client_id/token_endpoint)
+  // so we don't re-register, but drop the tokens so a fresh browser login runs.
+  let store = loadStore(account);
+  if (opts.forceReauth) {
+    const dcr = store
+      ? { client_id: store.client_id, token_endpoint: store.token_endpoint }
+      : null;
+    deleteCredential(account, "swiggy");
+    if (dcr?.client_id) {
+      saveCredential(account, "swiggy", {
+        client_id: dcr.client_id,
+        token_endpoint: dcr.token_endpoint,
+      });
+    }
+    store = { access_token: "", expires_at: 0, ...dcr } as AuthStore;
+    // access_token empty + expires_at 0 → falls through to the full OAuth flow,
+    // while client_id is still available below to skip re-registration.
+    if (!dcr?.client_id) store = null;
+  }
 
   // Happy path: token exists and not near expiry
   if (store?.access_token && store.expires_at > Date.now() + REFRESH_BUFFER_MS) {
@@ -250,7 +326,7 @@ export async function getAccessToken(): Promise<string> {
         store.client_id,
         store.refresh_token
       );
-      saveStore({ ...refreshed, client_id: store.client_id, token_endpoint: store.token_endpoint });
+      saveStore(account, { ...refreshed, client_id: store.client_id, token_endpoint: store.token_endpoint });
       return refreshed.access_token;
     } catch (e) {
       console.warn("Token refresh failed, re-authenticating...", (e as Error).message);
@@ -302,8 +378,8 @@ export async function getAccessToken(): Promise<string> {
     verifier
   );
 
-  saveStore({ ...token, client_id: clientId, token_endpoint: meta.token_endpoint });
-  console.log(`Token stored at ${TOKEN_PATH}\n`);
+  saveStore(account, { ...token, client_id: clientId, token_endpoint: meta.token_endpoint });
+  console.log("Swiggy token stored.\n");
 
   return token.access_token;
 }

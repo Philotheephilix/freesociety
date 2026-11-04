@@ -37,8 +37,25 @@ standalone entry points that predate it and share its lower-level modules.
 `McpServer` + `Registry` off each `Mcp-Session-Id` (a new session is created
 only on an `initialize` POST). The `Registry` (`src/hub/registry.ts`) holds that
 session's connected clients (`swiggy`/`jaw` MCP clients, `bitrefillKey` REST
-key), the per-service permission map, and the handles of dynamically-registered
-tools.
+key), the per-service permission map, the handles of dynamically-registered
+tools, and the `accountId` this session is bound to.
+
+### Credentials are per-account, not per-session or per-machine
+
+OAuth tokens and API keys live in one SQLite DB (`~/.zpay/zpay.db`, built-in
+`node:sqlite`) keyed by `(account_id, service)` — see `src/zpay-store.ts`. This
+replaces the old machine-global JSON files (`~/.zpay/{jaw-auth,auth,bitrefill}.json`),
+which were shared across every MCP session and silently connected a new user to
+whoever logged in last. The `connect_*` tools take an optional `accountId`;
+`registry.bindAccount` pins it for the session (first non-default id wins, a
+second conflicting id throws), and the account-aware `onAuthRefresh` closures
+set up in `src/hub/tools/connect.ts` mean a mid-session token refresh always
+reads the *bound* account's row. `accountId` defaults to `"default"`, for which
+a one-time migration imports any pre-existing legacy JSON file so existing
+single-user setups keep working. `forceReauth: true` on a `connect_*` discards
+the account's cached token and forces a fresh browser login (the only way to
+re-authenticate as yourself). When adding storage for a new service, go through
+`zpay-store.ts` — never read/write a token file directly.
 
 Only **five** tools exist at connect time: `connect_swiggy`, `connect_jaw`,
 `connect_bitrefill`, `configure_permissions`, `buy`. Everything else appears

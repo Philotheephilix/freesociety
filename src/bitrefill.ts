@@ -1,40 +1,31 @@
 // Bitrefill v2 API client. Buys gift cards, paid via crypto invoice.
 // Docs: https://docs.bitrefill.com/
 
-import { readFileSync, writeFileSync, mkdirSync, chmodSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
+import { loadCredential, saveCredential, sanitizeAccountId } from "./zpay-store.js";
 
 const BASE_URL = "https://api.bitrefill.com/v2";
-const KEY_DIR = join(homedir(), ".zpay");
-const KEY_PATH = join(KEY_DIR, "bitrefill.json");
 
-// Load a stored key without throwing (env var wins, then disk). Returns null
-// when none is configured — callers that require a key use loadApiKey instead.
-export function loadStoredApiKey(): string | null {
+// Load a stored key without throwing (env var wins, then the per-account store).
+// Returns null when none is configured — callers that require a key use
+// loadApiKey instead.
+export function loadStoredApiKey(accountId?: string): string | null {
   const envKey = process.env.BITREFILL_API_KEY;
   if (envKey) return envKey;
-  try {
-    const { api_key } = JSON.parse(readFileSync(KEY_PATH, "utf8")) as { api_key: string };
-    return api_key || null;
-  } catch {
-    return null;
-  }
+  const cred = loadCredential(sanitizeAccountId(accountId), "bitrefill");
+  return cred?.api_key || null;
 }
 
-// Persist the key so future sessions/reconnects don't need it re-supplied.
-export function saveApiKey(apiKey: string): void {
-  mkdirSync(KEY_DIR, { recursive: true });
-  writeFileSync(KEY_PATH, JSON.stringify({ api_key: apiKey }, null, 2), { mode: 0o600 });
-  // writeFileSync's mode only applies on create; chmod ensures 0o600 on overwrite too.
-  chmodSync(KEY_PATH, 0o600);
+// Persist the key for this account so future sessions/reconnects don't need it
+// re-supplied.
+export function saveApiKey(apiKey: string, accountId?: string): void {
+  saveCredential(sanitizeAccountId(accountId), "bitrefill", { api_key: apiKey });
 }
 
-function loadApiKey(): string {
-  const key = loadStoredApiKey();
+function loadApiKey(accountId?: string): string {
+  const key = loadStoredApiKey(accountId);
   if (key) return key;
   throw new Error(
-    `No Bitrefill API key. Set BITREFILL_API_KEY or write {"api_key":"..."} to ${KEY_PATH}`
+    `No Bitrefill API key. Set BITREFILL_API_KEY or connect_bitrefill with an apiKey.`
   );
 }
 
