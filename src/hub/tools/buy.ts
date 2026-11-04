@@ -154,14 +154,10 @@ export async function handleBuy(
         throw new Error("claim_gift_card requires a positive numeric valueInr.");
       }
 
-      // Step a: prepare the Bitrefill invoice.
-      const p = await prepareInvoice(valueInr);
-
-      // Step b: check JAW is connected.
+      // Steps b-d: check JAW connectivity and permissions BEFORE hitting Bitrefill.
+      // This avoids creating an orphaned invoice when JAW is missing or blocked.
       if (!registry.jaw) {
-        return (
-          `PAYMENT_REQUIRED_NO_JAW: JAW not connected. Call connect_jaw first.`
-        );
+        return `PAYMENT_REQUIRED_NO_JAW: JAW not connected. Call connect_jaw first.`;
       }
 
       // Step c: discover JAW pay tool.
@@ -172,10 +168,13 @@ export async function handleBuy(
         return `JAW_NO_PAY_TOOL: no tool matching /pay|send|transfer/i found among: ${names}`;
       }
 
-      // Step d: check permission.
+      // Step d: check permission before creating invoice.
       if (!registry.isAllowed("jaw", jawPayTool)) {
         return `PAYMENT_BLOCKED: configure_permissions has blocked jaw.${jawPayTool}`;
       }
+
+      // Step a: prepare the Bitrefill invoice (only after JAW checks pass).
+      const p = await prepareInvoice(valueInr);
 
       // Step e: execute the JAW payment.
       await registry.jaw.callTool(jawPayTool, {
@@ -239,10 +238,14 @@ export async function handleBuy(
           let isError = false;
           try {
             enforcePaymentPolicy(block.name, args);
-            resultText =
-              block.name === CLAIM_GIFT_CARD_TOOL.name
-                ? await runLocalTool(block.name, args)
-                : await registry.swiggy!.callTool(block.name, args);
+            if (block.name === CLAIM_GIFT_CARD_TOOL.name) {
+              resultText = await runLocalTool(block.name, args);
+            } else {
+              if (!registry.isAllowed("swiggy", block.name)) {
+                throw new Error(`Blocked by permissions: swiggy.${block.name} is denied.`);
+              }
+              resultText = await registry.swiggy!.callTool(block.name, args);
+            }
           } catch (e) {
             resultText = `ERROR: ${(e as Error).message}`;
             isError = true;
