@@ -7,7 +7,8 @@
     "order": "tsx src/agent.ts",
     "giftcard": "tsx src/giftcard.ts",
     "hub": "tsx src/hub/server.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "test:e2e": "tsx src/hub/integration.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
