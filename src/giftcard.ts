@@ -57,8 +57,8 @@ export interface ClaimResult {
 
 // Step 1: create a Bitrefill invoice for a ₹value Swiggy card, payable in USDC
 // on Base. Returns the deposit address + amount; does NOT pay.
-export async function prepareInvoice(valueInr: number): Promise<PreparedInvoice> {
-  const bitrefill = new BitrefillClient();
+export async function prepareInvoice(valueInr: number, apiKey?: string): Promise<PreparedInvoice> {
+  const bitrefill = new BitrefillClient(apiKey);
 
   console.log(`Searching Swiggy gift cards (India)...`);
   const products = await bitrefill.searchProducts("swiggy", COUNTRY);
@@ -115,9 +115,10 @@ async function pollInvoice(
 // then extract the voucher and (optionally) redeem it on the emulator.
 export async function settleClaim(
   invoiceId: string,
-  redeem = true
+  redeem = true,
+  apiKey?: string
 ): Promise<ClaimResult> {
-  const bitrefill = new BitrefillClient();
+  const bitrefill = new BitrefillClient(apiKey);
   console.log(`Waiting for Bitrefill to confirm + deliver...`);
   const final = await pollInvoice(bitrefill, invoiceId);
   const order = final.orders[0];

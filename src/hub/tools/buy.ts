@@ -173,8 +173,13 @@ export async function handleBuy(
         return `PAYMENT_BLOCKED: configure_permissions has blocked jaw.${jawPayTool}`;
       }
 
+      // Bitrefill key must be configured before we create an invoice.
+      if (!registry.bitrefillKey) {
+        return `PAYMENT_REQUIRED_NO_BITREFILL: Bitrefill not connected. Call connect_bitrefill first.`;
+      }
+
       // Step a: prepare the Bitrefill invoice (only after JAW checks pass).
-      const p = await prepareInvoice(valueInr);
+      const p = await prepareInvoice(valueInr, registry.bitrefillKey);
 
       // Step e: execute the JAW payment.
       await registry.jaw.callTool(jawPayTool, {
@@ -184,7 +189,7 @@ export async function handleBuy(
       });
 
       // Step f: settle the claim (poll + redeem).
-      const claim = await settleClaim(p.invoiceId, true);
+      const claim = await settleClaim(p.invoiceId, true, registry.bitrefillKey);
 
       // Step g: return success text.
       if (claim.redeemed) {

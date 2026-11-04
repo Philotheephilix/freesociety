@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "zpay-hub": {
+      "type": "http",
+      "url": "http://localhost:3400/mcp"
+    }
+  }
+}
