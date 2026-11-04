@@ -1,0 +1,20 @@
+{
+  "name": "zpay",
+  "version": "1.0.0",
+  "description": "Swiggy Instamart ordering agent using Claude + MCP",
+  "type": "module",
+  "scripts": {
+    "order": "tsx src/agent.ts",
+    "giftcard": "tsx src/giftcard.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "ethers": "^6.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
