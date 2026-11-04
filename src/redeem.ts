@@ -5,12 +5,62 @@
 // falls back to scanning the whole blob for a 16-char alphanumeric code and a
 // 6-digit PIN.
 
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REDEEM_SCRIPT = join(__dirname, "..", "scripts", "swiggy-redeem.sh");
+
+const ADB = process.env.ADB ?? "/opt/homebrew/bin/adb";
+const EMULATOR = process.env.EMULATOR ?? "/Users/I740422/Library/Android/sdk/emulator/emulator";
+const AVD_NAME = process.env.AVD_NAME ?? "Medium_Phone_API_37.0";
+const EMULATOR_BOOT_TIMEOUT_MS = 120_000;
+
+// Returns true if at least one emulator-* device is online in `adb devices`.
+function emulatorRunning(): boolean {
+  try {
+    const out = execSync(`"${ADB}" devices`, { encoding: "utf8" });
+    return /^emulator-\d+\s+device$/m.test(out);
+  } catch {
+    return false;
+  }
+}
+
+// Start the AVD in the background and wait until `adb shell getprop sys.boot_completed`
+// returns "1" (emulator fully booted) or the timeout expires.
+async function startEmulator(): Promise<void> {
+  console.log(`• Emulator not running — booting AVD "${AVD_NAME}"…`);
+  const child = spawn(EMULATOR, ["-avd", AVD_NAME, "-no-snapshot-save"], {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+
+  const deadline = Date.now() + EMULATOR_BOOT_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 3_000));
+    try {
+      const booted = execSync(`"${ADB}" shell getprop sys.boot_completed 2>/dev/null`, {
+        encoding: "utf8",
+        timeout: 5_000,
+      }).trim();
+      if (booted === "1") {
+        console.log("• Emulator booted.");
+        return;
+      }
+    } catch {
+      // adb not yet connected — keep polling
+    }
+  }
+  throw new Error(`Emulator did not boot within ${EMULATOR_BOOT_TIMEOUT_MS / 1000}s.`);
+}
+
+// Ensure an emulator is running before the redeem script talks to adb.
+export async function ensureEmulator(): Promise<void> {
+  if (emulatorRunning()) return;
+  await startEmulator();
+}
 
 export interface VoucherCredentials {
   code: string; // 16-char alphanumeric
@@ -77,11 +127,12 @@ export function parseVoucher(
   return code.length === 16 && pin.length === 6 ? { code, pin } : null;
 }
 
-// Run the emulator redeem script. Resolves on exit 0, rejects with the script's
-// stderr otherwise. Streams the script's log lines to the console.
-export function redeemOnEmulator(
+// Run the emulator redeem script. Boots the emulator first if not running.
+// Resolves on exit 0, rejects with the script's stderr otherwise.
+export async function redeemOnEmulator(
   creds: VoucherCredentials
 ): Promise<string> {
+  await ensureEmulator();
   return new Promise((resolve, reject) => {
     const proc = spawn("bash", [REDEEM_SCRIPT, creds.code, creds.pin], {
       stdio: ["ignore", "pipe", "pipe"],
