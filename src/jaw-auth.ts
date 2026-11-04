@@ -178,6 +178,23 @@ export interface JawAuthResult {
   loginUrl: string; // the authorize URL that was opened for the user
 }
 
+// Non-interactive refresh (cache or refresh_token only, else throw) — wired to
+// onAuthRefresh so an unattended 401 fails fast instead of hanging on a browser login.
+export async function refreshJawTokenSilent(): Promise<string> {
+  const store = loadStore();
+  if (store?.access_token && store.expires_at > Date.now() + REFRESH_BUFFER_MS) {
+    return store.access_token;
+  }
+  if (store?.refresh_token) {
+    const refreshed = await refreshAccessToken(store.refresh_token);
+    saveStore(refreshed);
+    return refreshed.access_token;
+  }
+  throw new Error(
+    "JAW token expired and no refresh_token available — re-run connect_jaw to re-authorize."
+  );
+}
+
 /**
  * Returns a valid JAW access token, running the browser OAuth flow if needed.
  * - Cached, unexpired token: returned immediately (loginUrl empty).

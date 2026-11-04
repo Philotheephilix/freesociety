@@ -207,6 +207,27 @@ function saveStore(s: AuthStore): void {
 
 const REFRESH_BUFFER_MS = 60_000; // refresh 1 min before expiry
 
+// Non-interactive refresh (cache or refresh_token only, else throw) — wired to
+// onAuthRefresh so an unattended 401 fails fast instead of hanging on a browser login.
+export async function refreshSwiggyTokenSilent(): Promise<string> {
+  const store = loadStore();
+  if (store?.access_token && store.expires_at > Date.now() + REFRESH_BUFFER_MS) {
+    return store.access_token;
+  }
+  if (store?.refresh_token && store.token_endpoint && store.client_id) {
+    const refreshed = await refreshAccessToken(
+      store.token_endpoint,
+      store.client_id,
+      store.refresh_token
+    );
+    saveStore({ ...refreshed, client_id: store.client_id, token_endpoint: store.token_endpoint });
+    return refreshed.access_token;
+  }
+  throw new Error(
+    "Swiggy token expired and no refresh_token available — re-run connect_swiggy to re-authorize."
+  );
+}
+
 /**
  * Returns a valid Bearer token. Handles:
  * - First run: DCR → browser OAuth flow → store

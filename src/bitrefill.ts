@@ -1,24 +1,38 @@
 // Bitrefill v2 API client. Buys gift cards, paid via crypto invoice.
 // Docs: https://docs.bitrefill.com/
 
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, chmodSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
 const BASE_URL = "https://api.bitrefill.com/v2";
-const KEY_PATH = join(homedir(), ".zpay", "bitrefill.json");
+const KEY_DIR = join(homedir(), ".zpay");
+const KEY_PATH = join(KEY_DIR, "bitrefill.json");
 
-function loadApiKey(): string {
+// Load a stored key without throwing (env var wins, then disk). Returns null
+// when none is configured — callers that require a key use loadApiKey instead.
+export function loadStoredApiKey(): string | null {
   const envKey = process.env.BITREFILL_API_KEY;
   if (envKey) return envKey;
   try {
-    const { api_key } = JSON.parse(readFileSync(KEY_PATH, "utf8")) as {
-      api_key: string;
-    };
-    if (api_key) return api_key;
+    const { api_key } = JSON.parse(readFileSync(KEY_PATH, "utf8")) as { api_key: string };
+    return api_key || null;
   } catch {
-    /* fall through */
+    return null;
   }
+}
+
+// Persist the key so future sessions/reconnects don't need it re-supplied.
+export function saveApiKey(apiKey: string): void {
+  mkdirSync(KEY_DIR, { recursive: true });
+  writeFileSync(KEY_PATH, JSON.stringify({ api_key: apiKey }, null, 2), { mode: 0o600 });
+  // writeFileSync's mode only applies on create; chmod ensures 0o600 on overwrite too.
+  chmodSync(KEY_PATH, 0o600);
+}
+
+function loadApiKey(): string {
+  const key = loadStoredApiKey();
+  if (key) return key;
   throw new Error(
     `No Bitrefill API key. Set BITREFILL_API_KEY or write {"api_key":"..."} to ${KEY_PATH}`
   );

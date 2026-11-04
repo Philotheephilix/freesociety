@@ -44,8 +44,8 @@ function buildServer(registry: Registry): McpServer {
 
   server.tool(
     "connect_bitrefill",
-    "Connect to Bitrefill with an API key",
-    { apiKey: z.string() },
+    "Connect to Bitrefill. Pass apiKey once to save it; later calls may omit it to reuse the stored key.",
+    { apiKey: z.string().optional() },
     async ({ apiKey }) => {
       const text = await handleConnectBitrefill(registry, apiKey);
       if (connectSucceeded(text)) await registerServiceTools(server, registry, "bitrefill");
