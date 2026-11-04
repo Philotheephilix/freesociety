@@ -6,10 +6,12 @@
   "scripts": {
     "order": "tsx src/agent.ts",
     "giftcard": "tsx src/giftcard.ts",
+    "hub": "tsx src/hub/server.ts",
     "build": "tsc"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "ethers": "^6.17.0"
   },
   "devDependencies": {
