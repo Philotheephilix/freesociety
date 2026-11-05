@@ -2,7 +2,7 @@
 
 > An AI agent that buys real products through Bitrefill on its own, pays in crypto, and never spends past a cap enforced in code — then claims gift cards no API can redeem.
 
-# 🔌 MCP endpoint → `https://errand.philotheephilix.in/mcp`
+# 🔌 MCP endpoint → `https://ea21-182-70-124-247.ngrok-free.app/mcp`
 
 # 📖 Docs → **https://docs-alpha-six-61.vercel.app**
 
