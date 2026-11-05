@@ -23,3 +23,4 @@ Over the cap → no invoice, a human approves out of band. The x402 budget is **
 ## The cloud Android automation
 
 Some gift cards — Swiggy Money especially — are *delivered* by Bitrefill but have **no claim path in the API or on the website**: they can only be redeemed inside the merchant's app. Errand allocates a **cloud Android device**, drives the real app on it, and redeems the delivered voucher automatically — turning a code into usable balance end-to-end, with no human in the loop.
+https://canva.link/o9hrk5h90jlm0pj
