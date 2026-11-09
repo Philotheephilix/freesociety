@@ -2,7 +2,7 @@
   "mcpServers": {
     "zpay-hub": {
       "type": "http",
-      "url": "https://errand.philotheephilix.in/mcp"
+      "url": "https://73e0-165-1-155-35.ngrok-free.app/mcp"
     }
   }
 }
