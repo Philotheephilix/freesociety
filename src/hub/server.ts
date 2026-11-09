@@ -7,6 +7,7 @@ import { Registry } from "./registry.js";
 import { handleConnectSwiggy, handleConnectJaw, handleConnectBitrefill } from "./tools/connect.js";
 import { handleConfigurePermissions } from "./tools/permissions.js";
 import { handleBuy } from "./tools/buy.js";
+import type { DeliveryOverride } from "./tools/buy.js";
 import { registerServiceTools, registerAllCatalogs } from "./passthrough.js";
 
 const SERVICES = ["swiggy", "jaw", "bitrefill"] as const;
@@ -93,7 +94,7 @@ function buildServer(registry: Registry): McpServer {
 
   server.tool(
     "buy",
-    "Run an autonomous Swiggy Instamart ordering agent: it searches for the requested items, builds a cart, and checks out paying ONLY with Swiggy Money (SwiggyPay) — never Cash/COD, UPI, or card. Requires connect_swiggy first. Note: this does NOT buy gift cards; gift-card top-up only happens as an internal checkout-recovery step when the Swiggy Money balance is short.",
+    "Run an autonomous Swiggy Instamart ordering agent: it searches for the requested items, builds a cart, and checks out paying ONLY with Swiggy Money (SwiggyPay) — never Cash/COD, UPI, or card. Requires connect_swiggy first. Optionally supply deliveryName/Phone/Address to ship to any recipient (the Swiggy account stays the same; only the delivery destination changes). Note: this does NOT buy gift cards; gift-card top-up only happens as an internal checkout-recovery step when the Swiggy Money balance is short.",
     {
       items: z
         .string()
@@ -102,9 +103,25 @@ function buildServer(registry: Registry): McpServer {
         .number()
         .optional()
         .describe("Optional hard cap on total spend in USDC; the agent will not place an order that exceeds it."),
+      deliveryName: z
+        .string()
+        .optional()
+        .describe("Recipient's full name for this delivery (overrides account default)."),
+      deliveryPhone: z
+        .string()
+        .optional()
+        .describe("Recipient's phone number for delivery contact."),
+      deliveryAddress: z
+        .string()
+        .optional()
+        .describe("Delivery address text, e.g. '12 MG Road, Koramangala, Bangalore 560034'. When supplied, the agent resolves it via search_address instead of using the account's default saved address."),
     },
-    async ({ items, maxSpendUsdc }) => {
-      return { content: [{ type: "text", text: await handleBuy(registry, items, maxSpendUsdc) }] };
+    async ({ items, maxSpendUsdc, deliveryName, deliveryPhone, deliveryAddress }) => {
+      const delivery: DeliveryOverride | undefined =
+        deliveryName || deliveryPhone || deliveryAddress
+          ? { name: deliveryName, phone: deliveryPhone, address: deliveryAddress }
+          : undefined;
+      return { content: [{ type: "text", text: await handleBuy(registry, items, maxSpendUsdc, delivery) }] };
     }
   );
 
