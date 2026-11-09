@@ -74,13 +74,35 @@ const CLAIM_GIFT_CARD_TOOL: Anthropic.Tool = {
 };
 
 // ---------------------------------------------------------------------------
-// System prompt — copied verbatim from src/agent.ts
+// System prompt — copied verbatim from src/agent.ts, with optional delivery override
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `You are a Swiggy Instamart shopping agent. Your job is to order groceries and essentials for the user.
+export interface DeliveryOverride {
+  name?: string;
+  phone?: string; // withheld from prompt (PII)
+  address?: string;
+}
+
+export function buildSystemPrompt(delivery?: DeliveryOverride): string {
+  const hasAddress = delivery?.address?.trim();
+  const hasName = delivery?.name?.trim();
+
+  const addressStep = hasAddress
+    ? `1. Call search_address with the query "${delivery!.address}" to resolve it to an addressId. Use the first result's addressId verbatim (full string including any "__" separator).`
+    : `1. Call get_addresses to fetch the user's saved delivery addresses. Pick the first/default one (the one marked as suggested/preselected) and note its addressId. Copy the FULL addressId string verbatim, including everything after the "__" separator.`;
+
+  const deliveryBlock =
+    hasAddress || hasName
+      ? `\n## Delivery details (override — use these verbatim for this order)\n` +
+        (hasName ? `- Recipient name: ${delivery!.name}\n` : "") +
+        (hasAddress ? `- Address: ${delivery!.address}\n` : "") +
+        `(Phone number is withheld from this prompt for privacy.)\n`
+      : "";
+
+  return `You are a Swiggy Instamart shopping agent. Your job is to order groceries and essentials for the user.
 
 ## Order flow — follow this exact sequence:
-1. Call get_addresses to fetch the user's saved delivery addresses. Pick the first/default one (the one marked as suggested/preselected) and note its addressId. Copy the FULL addressId string verbatim, including everything after the "__" separator.
+${addressStep}
 2. Call search_products for each item the user wants. Pick the best matching variant (smallest suitable pack size).
 3. Call update_cart with ALL items together (it replaces the whole cart). Use the selectedAddressId from step 1 (the full addressId string).
 4. Call get_cart to confirm items and read the bill total.
@@ -98,7 +120,8 @@ const SYSTEM_PROMPT = `You are a Swiggy Instamart shopping agent. Your job is to
 - Call claim_gift_card ONLY to recover from an insufficient-balance checkout failure — never preemptively, and never more than once per order.
 - If a product isn't found, skip it and note it in the summary.
 - Do not ask clarifying questions mid-flow — make sensible choices and proceed.
-- When the order is placed, STOP calling tools and give a clean final summary: items ordered, total, payment method, order ID, estimated delivery.`;
+- When the order is placed, STOP calling tools and give a clean final summary: items ordered, total, payment method, order ID, estimated delivery.${deliveryBlock}`;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -119,7 +142,8 @@ function toAnthropicTools(mcpTools: McpTool[]): Anthropic.Tool[] {
 export async function handleBuy(
   registry: Registry,
   items: string,
-  maxSpendUsdc?: number
+  maxSpendUsdc?: number,
+  delivery?: DeliveryOverride
 ): Promise<string> {
   // Pre-condition: Swiggy must be connected.
   if (!registry.swiggy) {
@@ -214,7 +238,7 @@ export async function handleBuy(
       const response = await client.messages.create({
         model: MODEL,
         max_tokens: 8000,
-        system: SYSTEM_PROMPT,
+        system: buildSystemPrompt(delivery),
         messages,
         tools,
       });
