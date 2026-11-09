@@ -14,7 +14,7 @@ Create `.cursor/mcp.json` in your project root:
 {
   "mcpServers": {
     "errand": {
-      "url": "https://errand.philotheephilix.in/mcp"
+      "url": "https://73e0-165-1-155-35.ngrok-free.app/mcp"
     }
   }
 }
@@ -31,7 +31,7 @@ Open **Cursor Settings → MCP**. Errand should appear in the server list with a
 green status and its five built-in tools: `connect_jaw`, `connect_bitrefill`,
 `connect_swiggy`, `configure_permissions`, `buy`. If it shows a red status,
 confirm the URL resolves and that your network can reach
-`errand.philotheephilix.in`.
+`73e0-165-1-155-35.ngrok-free.app`.
 
 ## Next
 

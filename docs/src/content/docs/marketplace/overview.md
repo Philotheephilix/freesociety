@@ -20,7 +20,7 @@ passthrough tool, behind the same permission gate and spend cap.
 - **The hub's safety layer for free** — permission gating, a pre-purchase spend
   cap, no retry on money-moving calls. The guarantees that make an autonomous
   wallet safe apply to your integration too.
-- **One endpoint.** Your agents already speak to `errand.philotheephilix.in/mcp`;
+- **One endpoint.** Your agents already speak to `73e0-165-1-155-35.ngrok-free.app/mcp`;
   a new integration is new tools, not a new client.
 
 ## How it works

@@ -9,12 +9,12 @@ never spend past a cap enforced in code. It also claims gift cards that have no
 Bitrefill API or website redemption path, by redeeming them automatically on a
 cloud Android device.
 
-Public endpoint: `https://errand.philotheephilix.in/mcp`
+Public endpoint: `https://73e0-165-1-155-35.ngrok-free.app/mcp`
 Server identity: `zpay-hub` v1.0.0. MCP path: `/mcp`.
 
 ## Platform
 web (a documentation website). The docs are a separate static surface served by
-Caddy at the domain root `https://errand.philotheephilix.in/`, while `/mcp`
+Caddy at the domain root `https://73e0-165-1-155-35.ngrok-free.app/`, while `/mcp`
 continues to proxy to the live hub.
 
 ## Stack (docs surface)

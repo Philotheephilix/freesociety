@@ -8,14 +8,14 @@ Claude Code speaks MCP natively. Add Errand as a remote Streamable-HTTP server.
 ## Add with the CLI
 
 ```bash
-claude mcp add --transport http errand https://errand.philotheephilix.in/mcp
+claude mcp add --transport http errand https://73e0-165-1-155-35.ngrok-free.app/mcp
 ```
 
 This registers the server for the current project. To make it available in every
 project, add it at user scope:
 
 ```bash
-claude mcp add --transport http --scope user errand https://errand.philotheephilix.in/mcp
+claude mcp add --transport http --scope user errand https://73e0-165-1-155-35.ngrok-free.app/mcp
 ```
 
 ## Or edit the config directly
@@ -27,7 +27,7 @@ Add an entry under `mcpServers` in your Claude Code MCP configuration:
   "mcpServers": {
     "errand": {
       "type": "http",
-      "url": "https://errand.philotheephilix.in/mcp"
+      "url": "https://73e0-165-1-155-35.ngrok-free.app/mcp"
     }
   }
 }

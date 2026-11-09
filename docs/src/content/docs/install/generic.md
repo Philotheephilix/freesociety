@@ -7,7 +7,7 @@ Any client that implements the Model Context Protocol over Streamable HTTP can
 use Errand. The only two facts you need are the endpoint and the transport.
 
 ```text
-Endpoint    https://errand.philotheephilix.in/mcp
+Endpoint    https://73e0-165-1-155-35.ngrok-free.app/mcp
 Transport   Streamable HTTP (JSON-RPC)
 ```
 
@@ -19,7 +19,7 @@ Most clients take a server entry with a URL. The common shape:
 {
   "mcpServers": {
     "errand": {
-      "url": "https://errand.philotheephilix.in/mcp"
+      "url": "https://73e0-165-1-155-35.ngrok-free.app/mcp"
     }
   }
 }
@@ -47,7 +47,7 @@ tools (`jaw__*`, `swiggy__*`, `bitrefill__*`).
 You can confirm reachability without a full client. Initialize, then list tools:
 
 ```bash
-curl -sN https://errand.philotheephilix.in/mcp \
+curl -sN https://73e0-165-1-155-35.ngrok-free.app/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{

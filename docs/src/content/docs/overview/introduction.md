@@ -11,7 +11,7 @@ no Bitrefill API or website redemption path, by redeeming them automatically on
 a cloud Android device.
 
 ```text
-Public endpoint   https://errand.philotheephilix.in/mcp
+Public endpoint   https://73e0-165-1-155-35.ngrok-free.app/mcp
 Transport         Streamable HTTP · JSON-RPC
 Server identity   zpay-hub v1.0.0
 ```

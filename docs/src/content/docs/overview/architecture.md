@@ -9,7 +9,7 @@ proxy fronts it — this documentation site is served from the same domain root,
 with `/mcp` proxied to the hub.
 
 ```text
-MCP client ──HTTP──▶ errand.philotheephilix.in/mcp ──▶ zpay-hub (:3400)
+MCP client ──HTTP──▶ 73e0-165-1-155-35.ngrok-free.app/mcp ──▶ zpay-hub (:3400)
                                                          │
                                  ┌───────────────────────┼───────────────────────┐
                                  ▼                       ▼                        ▼

@@ -7,7 +7,7 @@ Errand is a hosted MCP server. There is nothing to install locally — you point
 your MCP client at the public endpoint and connect the services you need.
 
 ```text
-Endpoint    https://errand.philotheephilix.in/mcp
+Endpoint    https://73e0-165-1-155-35.ngrok-free.app/mcp
 Transport   Streamable HTTP
 ```
 
@@ -19,7 +19,7 @@ Pick your client for the exact configuration:
 - [Cursor](/install/cursor/)
 - [Any other MCP client](/install/generic/)
 
-All three point at the same `https://errand.philotheephilix.in/mcp` endpoint
+All three point at the same `https://73e0-165-1-155-35.ngrok-free.app/mcp` endpoint
 over Streamable HTTP.
 
 ## 2. Connect the services
