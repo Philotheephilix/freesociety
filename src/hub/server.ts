@@ -34,7 +34,7 @@ function buildServer(registry: Registry): McpServer {
 
   server.tool(
     "connect_swiggy",
-    "Connect the Swiggy account (Instamart). On success, Swiggy's upstream tools become callable as namespaced passthrough tools (swiggy__*) and the high-level `buy` tool can place orders. Call this before `buy` or any swiggy__* tool.",
+    "STEP 1 OF 3 — required before any purchase. Connect the Swiggy account so orders can be placed. Opens a browser login (phone number + OTP) if no cached token exists for this account. On success, Swiggy's upstream tools become available (swiggy__*) and the `buy` tool is unlocked. After this succeeds, proceed to connect_jaw (step 2).",
     {
       accountId: z.string().min(1).describe(ACCOUNT_DESC),
       forceReauth: z.boolean().optional().describe(FORCE_REAUTH_DESC),
@@ -48,7 +48,7 @@ function buildServer(registry: Registry): McpServer {
 
   server.tool(
     "connect_jaw",
-    "Connect the JAW smart wallet. Opens JAW's login in the browser and returns a login URL to complete authorization (no token argument needed). On success, JAW's wallet tools become callable as namespaced passthrough tools (jaw__*) — including the three distinct money-movement tools jaw_session_x402_pay (pay a web service from the x402 budget), jaw_send_calls (transfer tokens, e.g. pay a Bitrefill deposit), and jaw_session_execute (repeat calls under a granted permission).",
+    "STEP 2 OF 3 — required before any purchase. Connect the JAW crypto wallet that pays for Swiggy gift-card top-ups. Opens JAW's browser login and returns a login URL; complete it to authorize. On success, JAW wallet tools are available (jaw__*) including jaw_send_calls (token transfers) and jaw_session_x402_pay (web-service payments). After this succeeds, proceed to connect_bitrefill (step 3).",
     {
       accountId: z.string().min(1).describe(ACCOUNT_DESC),
       forceReauth: z.boolean().optional().describe(FORCE_REAUTH_DESC),
@@ -62,7 +62,7 @@ function buildServer(registry: Registry): McpServer {
 
   server.tool(
     "connect_bitrefill",
-    "Connect Bitrefill (gift-card fulfillment). Pass apiKey once; it is saved so later reconnects may omit it. On success, Bitrefill's tools become callable as namespaced passthrough tools (bitrefill__*) for searching gift cards, creating crypto invoices, and checking invoice/order status.",
+    "STEP 3 OF 3 — required before any purchase. Connect Bitrefill, the gift-card fulfillment service that tops up Swiggy Money when the balance is insufficient. Get your API key from https://www.bitrefill.com/api/ (account → API), then pass it as apiKey — it is saved and can be omitted on later reconnects. NO purchase (buy tool) will proceed without this step: the hub blocks checkout-recovery entirely if Bitrefill is not connected. After this succeeds, all three services are ready and you may call buy.",
     {
       apiKey: z.string().optional(),
       accountId: z.string().min(1).describe(ACCOUNT_DESC),
@@ -94,7 +94,7 @@ function buildServer(registry: Registry): McpServer {
 
   server.tool(
     "buy",
-    "Run an autonomous Swiggy Instamart ordering agent: it searches for the requested items, builds a cart, and checks out paying ONLY with Swiggy Money (SwiggyPay) — never Cash/COD, UPI, or card. Requires connect_swiggy first. Optionally supply deliveryName/Phone/Address to ship to any recipient (the Swiggy account stays the same; only the delivery destination changes). Note: this does NOT buy gift cards; gift-card top-up only happens as an internal checkout-recovery step when the Swiggy Money balance is short.",
+    "Place a Swiggy Instamart order. PREREQUISITES (all three required — call them in order if not done yet): 1) connect_swiggy, 2) connect_jaw, 3) connect_bitrefill. The hub will refuse to proceed without all three. Payment is ALWAYS Swiggy Money (SwiggyPay) — never Cash/COD, UPI, or card. If the Swiggy Money balance is short, the hub automatically tops it up via Bitrefill + JAW as a checkout-recovery step. Optionally supply deliveryName/Phone/Address to ship to any recipient; the Swiggy account remains the same, only the delivery destination changes.",
     {
       items: z
         .string()

@@ -96,7 +96,7 @@ export function buildSystemPrompt(delivery?: DeliveryOverride): string {
       ? `\n## Delivery details (override — use these verbatim for this order)\n` +
         (hasName ? `- Recipient name: ${delivery!.name}\n` : "") +
         (hasAddress ? `- Address: ${delivery!.address}\n` : "") +
-        `(Phone number is withheld from this prompt for privacy.)\n`
+        (delivery?.phone ? `(Phone number is withheld from this prompt for privacy.)\n` : "")
       : "";
 
   return `You are a Swiggy Instamart shopping agent. Your job is to order groceries and essentials for the user.
@@ -160,6 +160,17 @@ export async function handleBuy(
     // Load Swiggy tools once per invocation.
     const mcpTools = await registry.swiggy.listTools();
     const tools = [...toAnthropicTools(mcpTools), CLAIM_GIFT_CARD_TOOL];
+
+    // Fail fast if a delivery address was requested but Swiggy's catalog doesn't
+    // include search_address — better a clear error now than a mid-loop tool failure.
+    if (delivery?.address?.trim() && !mcpTools.some((t) => t.name === "search_address")) {
+      return JSON.stringify({
+        ok: false,
+        error:
+          "deliveryAddress was supplied but Swiggy's tool catalog does not include search_address. " +
+          "Cannot resolve the address to an addressId. Omit deliveryAddress to use the account's default saved address instead.",
+      });
+    }
 
     const messages: Anthropic.MessageParam[] = [
       {

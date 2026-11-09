@@ -21,4 +21,11 @@ const promptDefault = buildSystemPrompt(undefined);
 console.assert(promptDefault.includes("get_addresses"), "default prompt must include get_addresses");
 console.assert(!promptDefault.includes("search_address"), "default prompt must NOT include search_address");
 
+// Issue 2 fix: "phone withheld" sentence must NOT appear when phone is absent
+const promptNoPhone = buildSystemPrompt({ name: "Alice", address: "MG Road" });
+console.assert(!promptNoPhone.includes("Phone number is withheld"), "no phone supplied → no 'phone withheld' sentence");
+
+const promptWithPhone = buildSystemPrompt({ name: "Alice", phone: "9876543210", address: "MG Road" });
+console.assert(promptWithPhone.includes("Phone number is withheld"), "phone supplied → 'phone withheld' sentence present");
+
 console.log("buildSystemPrompt tests passed");
