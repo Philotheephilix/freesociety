@@ -168,6 +168,29 @@ function isInitialize(body: unknown): boolean {
 
 const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
+
+  // MCP clients probe these paths before attempting to connect.
+  if (url.pathname === "/") {
+    res.writeHead(200, { "Content-Type": "application/json" }).end(
+      JSON.stringify({ name: "zpay-hub", mcp: `${MCP_PATH}` })
+    );
+    return;
+  }
+  if (url.pathname === "/.well-known/oauth-authorization-server") {
+    // zpay-hub itself has no auth — Swiggy auth is handled inside connect_swiggy.
+    // Return a minimal doc so MCP clients don't bail on discovery.
+    res.writeHead(200, { "Content-Type": "application/json" }).end(
+      JSON.stringify({
+        issuer: `http://localhost:${PORT}`,
+        authorization_endpoint: `http://localhost:${PORT}/oauth/authorize`,
+        token_endpoint: `http://localhost:${PORT}/oauth/token`,
+        response_types_supported: ["code"],
+        grant_types_supported: ["authorization_code"],
+      })
+    );
+    return;
+  }
+
   if (url.pathname !== MCP_PATH) {
     res.writeHead(404).end("Not Found");
     return;
